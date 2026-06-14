@@ -5,6 +5,9 @@
 *.pem
 *.key
 
+# Internal working docs — kept local, out of the repo.
+internals/
+
 # Dependencies / build
 node_modules/
 dist/
