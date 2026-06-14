@@ -28,6 +28,15 @@ export const SLOT_STATUS_LABEL = {
   6: 'dead',
 } as const satisfies Record<number, SlotPhase>;
 
+/**
+ * Guarded lookup: any out-of-range status (including v5's `-1` UNRECOGNIZED)
+ * returns undefined. Keeps the single unchecked cast contained + tested here.
+ */
+export function slotPhaseFromStatus(status: number): SlotPhase | undefined {
+  if (!Number.isInteger(status) || status < 0 || status > 6) return undefined;
+  return SLOT_STATUS_LABEL[status as keyof typeof SLOT_STATUS_LABEL];
+}
+
 /** A single slot status transition observed on the stream. */
 export interface SlotUpdate {
   slot: number;

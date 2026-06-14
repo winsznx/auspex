@@ -21,6 +21,10 @@ export class AuspexBus {
 
   constructor(maxListeners = 50) {
     this.emitter.setMaxListeners(maxListeners);
+    // Node's EventEmitter throws if 'error' is emitted with zero listeners.
+    // Register a floor listener so a producer can never crash the process by
+    // surfacing an error before a consumer has subscribed.
+    this.emitter.on('error', () => {});
   }
 
   on<E extends EventName>(event: E, handler: (...args: AuspexEventMap[E]) => void): this {
