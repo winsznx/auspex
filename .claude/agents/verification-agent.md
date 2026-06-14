@@ -9,7 +9,7 @@ You are the **verification-agent** for Auspex. You assume the implementation-age
 
 ## What you verify
 - **Vs requirements** — does it satisfy the PRD component spec and its §9 gate exactly?
-- **Vs docs/facts** — does it match the recorded verified facts and official API shapes/limits?
+- **Vs documented facts** — does it match the recorded verified facts and official API shapes/limits?
 - **Vs edge cases** — reconnects, 429 rate limits (1 req/s/region), blockhash expiry, leader skip, uint64-as-string, empty/partial responses.
 - **Vs security/financial assumptions** — wallet secret never logged/committed; tip is LAST instruction, no ALT, ≥1000 lamports; no real SOL can leak through a retry loop.
 - **The gate, re-run live** — independently execute the verification command and confirm the real output. No mocks.
