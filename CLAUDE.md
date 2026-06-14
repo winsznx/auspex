@@ -1,7 +1,7 @@
 # CLAUDE.md — Auspex execution constitution
 
 This file governs how Claude Code builds Auspex. Read it fully before any action.
-Source of truth for *what* to build: [PRD.md](./PRD.md). This file is *how* to build it.
+It is the *how* to build. The *what* (canonical spec) is supplied in the task context.
 
 ---
 
@@ -36,7 +36,7 @@ cross-checkable on explorer.jito.wtf + Solscan, with the A/B result led up front
 7. **Component gate before advancing:** (a) `tsc --noEmit` clean; (b) runs against the real
    mainnet endpoint with real output; (c) no mocks. Do not start C(n+1) until C(n) is green.
 8. **Mainnet only.** Jito has no devnet. Tiny self-transfers only; real funds, real evidence.
-9. **No scope cuts, no deadline-anxiety framing.** Ship the full sequence in [PRD.md §9](./PRD.md).
+9. **No scope cuts, no deadline-anxiety framing.** Ship the full build sequence.
 
 ---
 
@@ -100,26 +100,25 @@ handling auth/keys · designing infrastructure · creating a public interface ·
 
 ## 4. Build sequence (the spine)
 
-Execute [PRD.md §9](./PRD.md) prompts **0 → 13 in order**. Each ends at a verification gate;
+Execute the build-sequence prompts **0 → 13 in order**. Each ends at a verification gate;
 do not advance past a red gate. C1 (Stream Ingestor) is already built + type-checked against
 `@triton-one/yellowstone-grpc@5.0.9`; drop it into `src/data-plane/stream-ingestor.ts`.
 
-The current plan + gate status lives in [PLAN.md](./PLAN.md) — keep it updated as the single
-human-readable progress ledger (gstack is the machine ledger).
+Keep the plan + gate status updated as the single human-readable progress ledger (gstack is
+the machine ledger).
 
-Prompt 0 (now): get the Day-0 gate ([docs/DAY0-GATE.md](./docs/DAY0-GATE.md)) to ALL GREEN via
-`npm run verify:day0` before any C-component work.
+Prompt 0 (now): get the Day-0 gate to ALL GREEN via `npm run verify:day0` before any
+C-component work.
 
 ---
 
-## 5. Tech facts already verified (do not re-derive — see PRD §4)
+## 5. Tech facts already verified (do not re-derive)
 
 Yellowstone is **v5** (`.destroy()` not `.cancel()`; uint64 fields arrive as strings; enable
 built-in reconnect with `slotRetention: 150`). Blockhash is fetched at **`confirmed`** (150-slot
 validity). Jito tip is a **last-instruction** SOL transfer to a `getTipAccounts` address, **no
 ALT**, min 1000 lamports, regional block engine, 1 req/s/IP/region. Full detail + the locked
-README answers (Q1/Q2/Q3) are in [PRD.md §4–§5](./PRD.md). These are recorded in gbrain — recall
-them, do not re-google them.
+README answers (Q1/Q2/Q3) live in the memory layer — recall them, do not re-google them.
 
 ---
 

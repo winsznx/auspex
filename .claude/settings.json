@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Edit",
+      "Write",
+      "Bash(npm install)",
+      "Bash(npm run typecheck)",
+      "Bash(npm run verify:day0)",
+      "Bash(npm run dev)",
+      "Bash(tsc:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git status)",
+      "Bash(git diff:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)"
+    ],
+    "ask": [
+      "Bash(npm run run:evidence)",
+      "Bash(npm run run:ab)",
+      "Bash(npm run fault:blockhash)",
+      "Bash(node:*src/index.ts*)",
+      "Bash(*sendBundle*)",
+      "Bash(*block-engine.jito.wtf*)",
+      "Bash(*api/v1/bundles*)"
+    ]
+  }
+}
