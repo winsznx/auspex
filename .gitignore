@@ -1,0 +1,19 @@
+# Secrets — NEVER commit. .env holds the hot-wallet secret key (real SOL).
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies / build
+node_modules/
+dist/
+
+# Logs / runtime
+*.log
+npm-debug.log*
+.DS_Store
+
+# Keep evidence/ committed as proof (PRD §7) — only ignore scratch
+evidence/tmp/
+evidence/*.local.json

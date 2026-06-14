@@ -1,0 +1,33 @@
+{
+  "name": "auspex",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Solana smart-transaction stack with an AI control plane that decides Jito bundle tip + timing from live network telemetry, and proves it beats the hardcoded baseline with on-chain-verifiable evidence.",
+  "type": "module",
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js",
+    "dev": "node --watch --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts",
+    "verify:day0": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-day0.ts",
+    "run:evidence": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts --mode=evidence",
+    "run:ab": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts --mode=ab",
+    "fault:blockhash": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts --inject=blockhash-expiry"
+  },
+  "dependencies": {
+    "@triton-one/yellowstone-grpc": "^5.0.9",
+    "@solana/web3.js": "^1.95.0",
+    "bs58": "^6.0.0",
+    "dotenv": "^16.4.5",
+    "pino": "^9.0.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.10",
+    "typescript": "^5.5.0"
+  }
+}

@@ -1,0 +1,5 @@
+# Evidence lives here.
+# Each run writes evidence/run-<RUN_ID>.json (machine) + run-<RUN_ID>.log (human).
+# Every bundle_id and slot number in these files MUST cross-check on:
+#   https://explorer.jito.wtf/bundle/<bundle_id>   and   https://solscan.io
+# No mocks, no synthetic data — committed evidence is the entry's proof.
