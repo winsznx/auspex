@@ -70,7 +70,7 @@ export class StreamIngestor implements SlotSource {
     this.bus = deps.bus;
     this.config = deps.config;
     this.options = { ...DEFAULT_OPTIONS, ...deps.options };
-    this.tracker = new SlotStateTracker(this.options.maxProcessedEntries);
+    this.tracker = new SlotStateTracker('grpc', this.options.maxProcessedEntries);
   }
 
   async start(): Promise<void> {

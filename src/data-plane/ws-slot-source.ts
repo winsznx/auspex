@@ -3,19 +3,19 @@
  *
  * The bounty allows "any compatible Geyser stream provider"; standard Solana RPC
  * exposes `slotsUpdatesSubscribe` (via web3.js `onSlotUpdate`) over a free
- * WebSocket, which carries the same commitment progression we need. We map its
- * `type` to our SlotPhase and feed the SAME SlotStateTracker the gRPC ingestor
- * uses, so watermarks + processed→confirmed lag are computed identically.
+ * WebSocket, carrying the same commitment progression. We map its `type` to our
+ * SlotPhase and feed the SAME SlotStateTracker the gRPC ingestor uses.
  *
- * Phase mapping (web3 SlotUpdate.type → SlotPhase):
- *   frozen → processed (node finished executing the slot's bank)
- *   optimisticConfirmation → confirmed (supermajority optimistic vote)
- *   root → finalized
- * createdBank/firstShredReceived/completed/dead pass through informationally.
+ * Phase mapping: frozen→processed, optimisticConfirmation→confirmed, root→
+ * finalized; createdBank/firstShredReceived/completed/dead pass through.
  *
- * web3.js Connection manages WebSocket reconnection + resubscription itself, so
- * this source does not hand-roll reconnect; it exposes the same `SlotSource`
- * health surface for parity.
+ * ⚠️ FALLBACK ONLY — NOT on the evidence path until C1 (gRPC) has passed its live
+ * gate. Two honesty caveats vs gRPC: (1) lag here is local-receive-clock and is
+ * tagged `source:'ws'` — never mix with gRPC lag; (2) many providers do not
+ * enable `slotsUpdatesSubscribe` ("unstable"), so we stay in `connecting` and
+ * never claim `streaming` until a real update arrives, and a silence watchdog
+ * rebuilds the Connection if the feed goes quiet (web3.js auto-reconnect does
+ * not cover a wedged half-open socket or an endpoint that simply never pushes).
  */
 import { Connection, type SlotUpdate as Web3SlotUpdate } from '@solana/web3.js';
 import type { AuspexBus } from '../shared/events.ts';
@@ -34,11 +34,13 @@ const WS_PHASE: Record<Web3SlotUpdate['type'], SlotPhase | undefined> = {
 };
 
 export interface WebSocketSlotSourceOptions {
+  silenceTimeoutMs: number;
   watchdogIntervalMs: number;
   maxProcessedEntries: number;
 }
 
 const DEFAULT_OPTIONS: WebSocketSlotSourceOptions = {
+  silenceTimeoutMs: 30_000,
   watchdogIntervalMs: 2_000,
   maxProcessedEntries: 1_024,
 };
@@ -56,22 +58,19 @@ export class WebSocketSlotSource implements SlotSource {
   private phase: IngestorPhase = 'idle';
   private lastUpdateAt = 0;
   private updatesSeen = 0;
+  private reconnects = 0;
+  private rebuilding = false;
 
   constructor(deps: { bus: AuspexBus; rpcUrl: string; options?: Partial<WebSocketSlotSourceOptions> }) {
     this.bus = deps.bus;
     this.rpcUrl = deps.rpcUrl;
     this.options = { ...DEFAULT_OPTIONS, ...deps.options };
-    this.tracker = new SlotStateTracker(this.options.maxProcessedEntries);
+    this.tracker = new SlotStateTracker('ws', this.options.maxProcessedEntries);
   }
 
   async start(): Promise<void> {
-    this.phase = 'connecting';
-    this.connection = new Connection(this.rpcUrl, 'confirmed');
-    this.subscriptionId = this.connection.onSlotUpdate((update) => this.onUpdate(update));
-    this.lastUpdateAt = Date.now();
-    this.phase = 'streaming';
-    this.watchdog = setInterval(() => this.tick(), this.options.watchdogIntervalMs);
-    logger.info({ rpcUrl: this.rpcUrl }, 'ws-slot-source subscribed');
+    await this.subscribe();
+    this.watchdog = setInterval(() => this.tickWatchdog(), this.options.watchdogIntervalMs);
   }
 
   async stop(): Promise<void> {
@@ -80,11 +79,7 @@ export class WebSocketSlotSource implements SlotSource {
       clearInterval(this.watchdog);
       this.watchdog = undefined;
     }
-    if (this.connection && this.subscriptionId !== undefined) {
-      await this.connection.removeSlotUpdateListener(this.subscriptionId);
-    }
-    this.subscriptionId = undefined;
-    this.connection = undefined;
+    await this.unsubscribe();
   }
 
   getState(): IngestorHealth {
@@ -93,12 +88,35 @@ export class WebSocketSlotSource implements SlotSource {
       msSinceLastUpdate: this.lastUpdateAt === 0 ? Number.POSITIVE_INFINITY : Date.now() - this.lastUpdateAt,
       watermarks: this.tracker.snapshot(),
       updatesSeen: this.updatesSeen,
-      reconnects: 0, // web3.js manages WS reconnection internally
+      reconnects: this.reconnects,
     };
+  }
+
+  private async subscribe(): Promise<void> {
+    // Stay 'connecting' until the FIRST real update — never claim 'streaming'
+    // for an endpoint that may not support slotsUpdatesSubscribe.
+    this.phase = 'connecting';
+    this.connection = new Connection(this.rpcUrl, 'confirmed');
+    this.subscriptionId = this.connection.onSlotUpdate((update) => this.onUpdate(update));
+    this.lastUpdateAt = Date.now(); // start the silence clock now
+    logger.info({ rpcUrl: this.rpcUrl }, 'ws-slot-source subscribing');
+  }
+
+  private async unsubscribe(): Promise<void> {
+    if (this.connection && this.subscriptionId !== undefined) {
+      try {
+        await this.connection.removeSlotUpdateListener(this.subscriptionId);
+      } catch (err) {
+        logger.warn({ err: err instanceof Error ? err.message : String(err) }, 'ws-slot-source unsubscribe failed');
+      }
+    }
+    this.subscriptionId = undefined;
+    this.connection = undefined;
   }
 
   private onUpdate(update: Web3SlotUpdate): void {
     this.lastUpdateAt = Date.now();
+    if (this.phase !== 'stopped') this.phase = 'streaming';
     const phase = WS_PHASE[update.type];
     if (!phase) return;
 
@@ -110,8 +128,40 @@ export class WebSocketSlotSource implements SlotSource {
     if (obs.watermark) this.bus.emit('watermark', obs.watermark);
   }
 
-  private tick(): void {
+  private tickWatchdog(): void {
     if (this.phase === 'stopped') return;
     this.bus.emit('health', this.getState());
+    const silentFor = this.lastUpdateAt === 0 ? 0 : Date.now() - this.lastUpdateAt;
+    if (silentFor > this.options.silenceTimeoutMs) {
+      void this.rebuild();
+    }
+  }
+
+  /**
+   * web3.js auto-reconnect does not cover a wedged half-open socket or an
+   * endpoint that never pushes slot updates — so on prolonged silence we
+   * recreate the Connection from scratch.
+   */
+  private async rebuild(): Promise<void> {
+    if (this.rebuilding || this.phase === 'stopped') return;
+    this.rebuilding = true;
+    this.reconnects += 1;
+    this.phase = 'reconnecting';
+    logger.warn({ reconnects: this.reconnects }, 'ws-slot-source rebuilding connection (silence)');
+    try {
+      await this.unsubscribe();
+      this.tracker.reset();
+      if (!this.isStopped()) await this.subscribe();
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      logger.error({ err: error.message }, 'ws-slot-source rebuild failed');
+      this.bus.emit('error', error);
+    } finally {
+      this.rebuilding = false;
+    }
+  }
+
+  private isStopped(): boolean {
+    return this.phase === 'stopped';
   }
 }

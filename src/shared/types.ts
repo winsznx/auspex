@@ -53,12 +53,22 @@ export interface Watermarks {
   finalized: number;
 }
 
-/** processed→confirmed timing sample for one slot (network-health signal). */
+/** Which feed produced an observation — lag is only comparable within one source. */
+export type SlotSourceKind = 'grpc' | 'ws';
+
+/**
+ * processed→confirmed timing sample for one slot (network-health signal).
+ * NOTE: `deltaMs` is a LOCAL receive-clock delta (when THIS client saw each
+ * status), not on-chain time — so it is transport-relative and only comparable
+ * within a single `source`. Do not mix sources in one comparison or present it
+ * as an on-chain figure a verifier could reproduce from an explorer.
+ */
 export interface LagSample {
   slot: number;
   processedAt: number;
   confirmedAt: number;
   deltaMs: number;
+  source: SlotSourceKind;
 }
 
 export type IngestorPhase = 'idle' | 'connecting' | 'streaming' | 'reconnecting' | 'stopped';

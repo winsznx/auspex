@@ -6,7 +6,7 @@
  * Pure: `observe()` mutates internal state and RETURNS what should be emitted;
  * the caller owns the bus. No I/O, no enums (strip-types safe).
  */
-import type { LagSample, SlotPhase, SlotUpdate, Watermarks } from './types.ts';
+import type { LagSample, SlotPhase, SlotSourceKind, SlotUpdate, Watermarks } from './types.ts';
 
 export interface SlotObservation {
   slotUpdate: SlotUpdate;
@@ -26,8 +26,10 @@ export class SlotStateTracker {
   private readonly watermarks: Watermarks = { processed: 0, confirmed: 0, finalized: 0 };
   private readonly processedAt = new Map<number, number>();
   private readonly maxProcessedEntries: number;
+  private readonly source: SlotSourceKind;
 
-  constructor(maxProcessedEntries = 1_024) {
+  constructor(source: SlotSourceKind, maxProcessedEntries = 1_024) {
+    this.source = source;
     this.maxProcessedEntries = maxProcessedEntries;
   }
 
@@ -90,6 +92,6 @@ export class SlotStateTracker {
     const processedAt = this.processedAt.get(slot);
     if (processedAt === undefined) return undefined;
     this.processedAt.delete(slot);
-    return { slot, processedAt, confirmedAt, deltaMs: confirmedAt - processedAt };
+    return { slot, processedAt, confirmedAt, deltaMs: confirmedAt - processedAt, source: this.source };
   }
 }
