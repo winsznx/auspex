@@ -1,23 +1,21 @@
 /**
- * C1 — Stream Ingestor (hot path).
+ * C1 — Stream Ingestor (hot path), Yellowstone v5 slot source.
  *
- * Subscribes to Yellowstone v5 slot status transitions and maintains the
- * authoritative processed/confirmed/finalized watermarks plus the
- * processed→confirmed timing signal. Deterministic, never awaits the LLM.
+ * Subscribes to slot status transitions and feeds the shared SlotStateTracker
+ * (monotonic processed/confirmed/finalized watermarks + processed→confirmed
+ * lag). Deterministic, never awaits the LLM. Implements `SlotSource` so the
+ * stack is source-agnostic.
  *
  * Reconnect model (verified v5 facts — do not re-derive):
- *  - The client's BUILT-IN reconnect (`{ enabled:true, slotRetention:150 }`) owns
- *    transient drops transparently: the same Duplex keeps yielding updates and
- *    replays up to 150 retained slots. We do NOT hand-roll that loop.
- *  - The Duplex emits `error`/`close` only when the built-in reconnect has
+ *  - Built-in reconnect (`{ enabled:true, slotRetention:150 }`) owns transient
+ *    drops transparently; we do NOT hand-roll that loop.
+ *  - The Duplex emits `error`/`close` only when built-in reconnect has
  *    TERMINALLY given up — we treat that as fatal and rebuild a fresh `Client`.
- *  - A silence watchdog is the backstop for a native-layer hang that never
- *    surfaces `error`/`close`; it triggers the same full rebuild.
+ *  - A silence watchdog backstops a native hang that never surfaces error/close.
  *
- * Other v5 facts baked in:
- *  - `subscribe(req)` returns a Node Duplex; teardown is `.destroy()`.
- *  - uint64 fields (`slot`, `parent`) arrive as STRINGS → `Number()` them.
- *  - slots filter `{ filterByCommitment: false }` emits every status transition.
+ * Other v5 facts: `subscribe(req)` returns a Node Duplex (teardown `.destroy()`);
+ * uint64 (`slot`,`parent`) arrive as STRINGS → `Number()`; slots filter
+ * `{ filterByCommitment:false }` emits every status transition.
  */
 import Client, {
   CommitmentLevel,
@@ -26,8 +24,9 @@ import Client, {
 } from '@triton-one/yellowstone-grpc';
 import type { AuspexBus } from '../shared/events.ts';
 import { logger } from '../shared/logger.ts';
+import { SlotStateTracker } from '../shared/slot-state.ts';
 import { slotPhaseFromStatus } from '../shared/types.ts';
-import type { IngestorHealth, IngestorPhase, SlotUpdate, Watermarks } from '../shared/types.ts';
+import type { IngestorHealth, IngestorPhase, SlotSource } from '../shared/types.ts';
 import type { YellowstoneConfig } from '../config.ts';
 
 type Stream = Awaited<ReturnType<Client['subscribe']>>;
@@ -50,10 +49,11 @@ const DEFAULT_OPTIONS: StreamIngestorOptions = {
   maxProcessedEntries: 1_024,
 };
 
-export class StreamIngestor {
+export class StreamIngestor implements SlotSource {
   private readonly bus: AuspexBus;
   private readonly config: YellowstoneConfig;
   private readonly options: StreamIngestorOptions;
+  private readonly tracker: SlotStateTracker;
 
   private client: Client | undefined;
   private stream: Stream | undefined;
@@ -61,8 +61,6 @@ export class StreamIngestor {
   private rebuildTimer: ReturnType<typeof setTimeout> | undefined;
 
   private phase: IngestorPhase = 'idle';
-  private readonly watermarks: Watermarks = { processed: 0, confirmed: 0, finalized: 0 };
-  private readonly processedAt = new Map<number, number>();
   private lastUpdateAt = 0;
   private updatesSeen = 0;
   private reconnects = 0;
@@ -72,6 +70,7 @@ export class StreamIngestor {
     this.bus = deps.bus;
     this.config = deps.config;
     this.options = { ...DEFAULT_OPTIONS, ...deps.options };
+    this.tracker = new SlotStateTracker(this.options.maxProcessedEntries);
   }
 
   async start(): Promise<void> {
@@ -98,7 +97,7 @@ export class StreamIngestor {
     return {
       phase: this.phase,
       msSinceLastUpdate: this.msSinceLastUpdate(),
-      watermarks: { ...this.watermarks },
+      watermarks: this.tracker.snapshot(),
       updatesSeen: this.updatesSeen,
       reconnects: this.reconnects,
     };
@@ -130,7 +129,7 @@ export class StreamIngestor {
     stream.on('error', (err: Error) => this.onTerminal('stream-error', err));
     stream.on('close', () => this.onTerminal('stream-close'));
     this.stream = stream;
-    // Start the silence clock now so an initial hang (subscribe returns but no
+    // Start the silence clock now so an initial hang (subscribe resolves but no
     // data ever flows) is still caught by the watchdog.
     this.lastUpdateAt = Date.now();
     this.setPhase('streaming');
@@ -152,52 +151,10 @@ export class StreamIngestor {
     const parent = slotUpdate.parent !== undefined ? Number(slotUpdate.parent) : undefined;
 
     this.updatesSeen += 1;
-    const event: SlotUpdate = { slot, parent, phase, observedAt: this.lastUpdateAt };
-    this.bus.emit('slot', event);
-
-    switch (phase) {
-      case 'processed':
-        this.rememberProcessed(slot, event.observedAt);
-        this.advanceWatermark('processed', slot);
-        break;
-      case 'confirmed':
-        this.recordLag(slot, event.observedAt);
-        this.advanceWatermark('confirmed', slot);
-        break;
-      case 'finalized':
-        this.advanceWatermark('finalized', slot);
-        break;
-      case 'dead':
-        // Abandoned fork: drop any pending processed timestamp so it can't
-        // mis-pair a future confirmed or linger in the map.
-        this.processedAt.delete(slot);
-        break;
-      default:
-        break;
-    }
-  }
-
-  private advanceWatermark(level: keyof Watermarks, slot: number): void {
-    if (slot <= this.watermarks[level]) return; // replayed/older slot — never regress
-    this.watermarks[level] = slot;
-    this.bus.emit('watermark', { ...this.watermarks });
-  }
-
-  private rememberProcessed(slot: number, observedAt: number): void {
-    this.processedAt.set(slot, observedAt);
-    // O(1) eviction: Map preserves insertion order, so the first key is oldest.
-    while (this.processedAt.size > this.options.maxProcessedEntries) {
-      const oldest = this.processedAt.keys().next().value;
-      if (oldest === undefined) break;
-      this.processedAt.delete(oldest);
-    }
-  }
-
-  private recordLag(slot: number, confirmedAt: number): void {
-    const processedAt = this.processedAt.get(slot);
-    if (processedAt === undefined) return;
-    this.processedAt.delete(slot);
-    this.bus.emit('lag', { slot, processedAt, confirmedAt, deltaMs: confirmedAt - processedAt });
+    const obs = this.tracker.observe(slot, parent, phase, this.lastUpdateAt);
+    this.bus.emit('slot', obs.slotUpdate);
+    if (obs.lag) this.bus.emit('lag', obs.lag);
+    if (obs.watermark) this.bus.emit('watermark', obs.watermark);
   }
 
   private onTerminal(reason: string, err?: Error): void {
@@ -220,9 +177,9 @@ export class StreamIngestor {
   }
 
   /**
-   * Full rebuild: built-in reconnect has either terminally failed or the native
-   * layer is silently hung. Re-arming reconnect on an existing client is
-   * unproven, so we drop it and construct a fresh `Client`.
+   * Full rebuild: built-in reconnect has terminally failed or the native layer
+   * is silently hung. Re-arming reconnect on an existing client is unproven, so
+   * we drop it and construct a fresh `Client`.
    */
   private scheduleRebuild(reason: string): void {
     if (this.rebuilding || this.phase === 'stopped') return;
@@ -233,7 +190,7 @@ export class StreamIngestor {
 
     this.teardownStream();
     this.client = undefined;
-    this.processedAt.clear();
+    this.tracker.reset();
     this.lastUpdateAt = Date.now(); // grant the new stream a full silence window
 
     this.rebuildTimer = setTimeout(() => {

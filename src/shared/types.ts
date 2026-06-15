@@ -71,3 +71,14 @@ export interface IngestorHealth {
   updatesSeen: number;
   reconnects: number;
 }
+
+/**
+ * A live slot/commitment feed. Both the Yellowstone gRPC ingestor (C1) and the
+ * RPC-WebSocket fallback implement this, so the rest of the stack is
+ * source-agnostic. The bounty permits "any compatible Geyser stream provider".
+ */
+export interface SlotSource {
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  getState(): IngestorHealth;
+}
