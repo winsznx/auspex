@@ -104,6 +104,30 @@ export interface TipFloorSnapshot {
   source: TipFloorSource;
 }
 
+/**
+ * Where we are relative to the next Jito-enabled leader window. Bundles only land
+ * while a Jito-Solana validator leads, and leaders hold 4 consecutive slots, so
+ * the data plane uses this to time submission. `leaderIdentity` is the leader of
+ * the CURRENT slot (base58 identity); undefined if the schedule has no entry.
+ */
+export interface LeaderWindowEvent {
+  currentSlot: number;
+  epoch: number;
+  inJitoWindow: boolean;
+  leaderIdentity: string | undefined;
+  /** 0 when currently inside a Jito window. */
+  slotsToNextJitoWindow: number;
+  nextJitoWindowSlot: number | undefined;
+}
+
+/** A slot whose leader produced no block (SLOT_DEAD). A full 4-slot dead window = missed bundle. */
+export interface LeaderSkipEvent {
+  slot: number;
+  windowStartSlot: number;
+  leaderIdentity: string | undefined;
+  wasJitoWindow: boolean;
+}
+
 export type IngestorPhase = 'idle' | 'connecting' | 'streaming' | 'reconnecting' | 'stopped';
 
 export interface IngestorHealth {

@@ -4,7 +4,15 @@
  * consumers share one checked event map. One process, two logical planes.
  */
 import { EventEmitter } from 'node:events';
-import type { SlotUpdate, Watermarks, LagSample, IngestorHealth, TipFloorSnapshot } from './types.ts';
+import type {
+  SlotUpdate,
+  Watermarks,
+  LagSample,
+  IngestorHealth,
+  TipFloorSnapshot,
+  LeaderWindowEvent,
+  LeaderSkipEvent,
+} from './types.ts';
 
 export interface AuspexEventMap {
   slot: [SlotUpdate];
@@ -12,6 +20,8 @@ export interface AuspexEventMap {
   lag: [LagSample];
   health: [IngestorHealth];
   tipFloor: [TipFloorSnapshot];
+  leaderWindow: [LeaderWindowEvent];
+  leaderSkip: [LeaderSkipEvent];
   error: [Error];
 }
 

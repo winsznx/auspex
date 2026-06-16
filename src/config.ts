@@ -38,6 +38,12 @@ export function solanaRpcUrl(): string {
   return requireEnv('SOLANA_RPC_URL');
 }
 
+const DEFAULT_KOBE_VALIDATORS_URL = 'https://kobe.mainnet.jito.network/api/v1/validators';
+
+export function kobeValidatorsUrl(): string {
+  return optionalEnv('KOBE_VALIDATORS_URL', DEFAULT_KOBE_VALIDATORS_URL)!;
+}
+
 export interface TipFloorConfig {
   restUrl: string;
   wsUrl: string;
