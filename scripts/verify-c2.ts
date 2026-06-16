@@ -37,7 +37,11 @@ async function main(): Promise<void> {
   bus.on('leaderSkip', (e) => {
     console.log(`[SKIP] slot=${e.slot} windowStart=${e.windowStartSlot} leader=${e.leaderIdentity?.slice(0, 8) ?? '?'} wasJito=${e.wasJitoWindow}`);
   });
-  bus.on('error', (e) => console.error('bus error:', e.message));
+  let sawError = false;
+  bus.on('error', (e) => {
+    sawError = true;
+    console.error('bus error:', e.message);
+  });
 
   console.log(`C2 verify · rpc=${rpcUrl} · ${RUN_MS}ms`);
   await tracker.start();
@@ -71,7 +75,7 @@ async function main(): Promise<void> {
     `windowEvents=${state.windowEvents} · leaderDecode ${matched}/${compared} match` +
     `\nskipEvents=${state.skipEvents} (skip detection wired on SLOT_DEAD; live firing exercised by C11, not asserted here)`,
   );
-  const pass = state.ready && state.windowEvents > 0 && compared >= MIN_COMPARED && matched === compared;
+  const pass = state.ready && state.windowEvents > 0 && compared >= MIN_COMPARED && matched === compared && !sawError;
   console.log(
     pass
       ? '\nGATE GREEN — live Jito windows emitted + leader decode matches the chain 100% over the sample'

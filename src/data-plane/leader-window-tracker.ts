@@ -260,11 +260,13 @@ export class LeaderWindowTracker {
     }
 
     if (alignmentConflicts > 0) {
-      const error = new Error(
+      // Detection without refusal is not a fix on a money path: a mis-mapped leader
+      // times a bundle to the wrong/non-Jito validator (wasted SOL). Refuse to
+      // serve — start() then fails RED; a rollover keeps the previous good windows.
+      logger.error({ epoch: epochInfo.epoch, alignmentConflicts }, '4-slot-aligned invariant violated — refusing to serve leader map');
+      throw new Error(
         `leader schedule violated the 4-slot-aligned invariant (${alignmentConflicts} window conflicts) — leader decode is unsafe`,
       );
-      logger.error({ epoch: epochInfo.epoch, alignmentConflicts }, error.message);
-      this.bus.emit('error', error);
     }
 
     const jitoWindowStartsAbs = [...jitoWindowStartSet].sort((a, b) => a - b);
