@@ -1,10 +1,14 @@
 /**
  * C2 live gate. Drives the LeaderWindowTracker off the live C1 WS slot stream and
- * proves two things against mainnet:
+ * proves against mainnet:
  *  1. The tracker emits real upcoming Jito-leader windows.
- *  2. Its leader decoding MATCHES the live chain — for a sample of slots we compare
- *     tracker.leaderOfSlot() against the RPC's own getSlotLeaders(). 100% required.
- * Leader skips are reported when observed (sporadic ~5%; forcing one is C11's job).
+ *  2. Its leader decoding MATCHES the live chain — for a sample of slots clamped to
+ *     the cached epoch, compare tracker.leaderOfSlot() against the RPC's own
+ *     getSlotLeaders(). 100% over a minimum sample required.
+ *
+ * SKIP DETECTION IS NOT ASSERTED HERE. `leaderSkip` fires on SLOT_DEAD; a natural
+ * dead slot is rare, so this gate only REPORTS skips if any occur. Live firing of
+ * the skip/failure path is exercised by C11 (the fault injector), not by C2.
  *
  * Free public RPC, no funded wallet, 0 SOL. Run: npm run verify:c2  (default 60s)
  */
@@ -15,7 +19,8 @@ import { WebSocketSlotSource } from '../src/data-plane/ws-slot-source.ts';
 import { LeaderWindowTracker } from '../src/data-plane/leader-window-tracker.ts';
 
 const RUN_MS = Number(process.env.C2_RUN_MS ?? 60_000);
-const SAMPLE = 24;
+const SAMPLE = 32;
+const MIN_COMPARED = 16;
 
 async function main(): Promise<void> {
   const rpcUrl = solanaRpcUrl();
@@ -40,12 +45,13 @@ async function main(): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, RUN_MS));
 
   const state = tracker.getState();
-  const currentSlot = state.currentSlot;
+  const { currentSlot, epochFirstSlot } = state;
 
-  console.log('\ncross-checking tracker leader decode vs live getSlotLeaders…');
+  console.log('\ncross-checking tracker leader decode vs live getSlotLeaders (clamped to epoch)…');
   const probe = new Connection(rpcUrl, 'confirmed');
-  const startSlot = Math.max(currentSlot - SAMPLE, 0);
-  const chainLeaders = await probe.getSlotLeaders(startSlot, SAMPLE);
+  const startSlot = Math.max(currentSlot - SAMPLE, epochFirstSlot ?? 0);
+  const limit = currentSlot - startSlot + 1;
+  const chainLeaders = limit > 0 ? await probe.getSlotLeaders(startSlot, limit) : [];
   let matched = 0;
   let compared = 0;
   for (let i = 0; i < chainLeaders.length; i += 1) {
@@ -61,11 +67,16 @@ async function main(): Promise<void> {
   await tracker.stop();
 
   console.log(
-    `\nepoch=${state.epoch} jitoWindows=${state.jitoWindows} windowEvents=${state.windowEvents} ` +
-    `skipEvents=${state.skipEvents} · leaderDecode ${matched}/${compared} match`,
+    `\nepoch=${state.epoch} jitoWindows=${state.jitoWindows} coverage=${(state.coverageRatio * 100).toFixed(1)}% ` +
+    `windowEvents=${state.windowEvents} · leaderDecode ${matched}/${compared} match` +
+    `\nskipEvents=${state.skipEvents} (skip detection wired on SLOT_DEAD; live firing exercised by C11, not asserted here)`,
   );
-  const pass = state.ready && state.windowEvents > 0 && compared > 0 && matched === compared;
-  console.log(pass ? '\nGATE GREEN — live Jito windows emitted + leader decode matches the chain 100%' : '\nGATE RED');
+  const pass = state.ready && state.windowEvents > 0 && compared >= MIN_COMPARED && matched === compared;
+  console.log(
+    pass
+      ? '\nGATE GREEN — live Jito windows emitted + leader decode matches the chain 100% over the sample'
+      : `\nGATE RED — ready=${state.ready} windowEvents=${state.windowEvents} compared=${compared} (need ≥${MIN_COMPARED}) matched=${matched}`,
+  );
   process.exit(pass ? 0 : 1);
 }
 

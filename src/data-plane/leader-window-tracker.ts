@@ -3,7 +3,7 @@
  *
  * Bundles only land while a Jito-Solana validator is the slot leader, and leaders
  * hold 4 consecutive slots. This tracker answers "Jito leader in N slots?" and
- * flags leader skips, deterministically and off a free public RPC.
+ * surfaces leader skips, deterministically and off a free public RPC.
  *
  * Source (verified D6, no new dependency, no funded wallet):
  *  - `getEpochInfo` → epochFirstSlot = absoluteSlot - slotIndex.
@@ -14,8 +14,14 @@
  *
  * The schedule is 4-aligned per epoch (windowStartRel = relIdx - relIdx%4), so the
  * leader of any slot is a single map lookup; the next Jito window is a binary
- * search over the precomputed sorted window-onset list. Skips come from the C1
- * slot stream's SLOT_DEAD ('dead') phase.
+ * search over the precomputed sorted window-onset list. That alignment is an
+ * empirical fact, not an RPC contract — so it is ASSERTED at build time and a
+ * violation raises an error rather than silently mis-mapping a leader (real SOL).
+ *
+ * SKIP DETECTION SCOPE: `leaderSkip` is emitted on the C1 stream's SLOT_DEAD
+ * ('dead') phase. It is structurally wired and unit-correct, but a natural dead
+ * slot is rare; live FIRING is exercised by C11 (the fault injector), not asserted
+ * by C2's own gate. C2's gate proves window emission + leader-decode-vs-chain only.
  */
 import { Connection } from '@solana/web3.js';
 import type { AuspexBus } from '../shared/events.ts';
@@ -23,6 +29,7 @@ import { logger } from '../shared/logger.ts';
 import type { LeaderSkipEvent, LeaderWindowEvent, SlotUpdate } from '../shared/types.ts';
 
 const SLOTS_PER_LEADER = 4;
+const ROLLOVER_BACKOFF_MS = 2_000;
 
 interface KobeValidator {
   identity_account?: unknown;
@@ -33,6 +40,7 @@ interface EpochWindows {
   epoch: number;
   epochFirstSlot: number;
   epochLastSlot: number;
+  slotsInEpoch: number;
   leaderByWindowRel: Map<number, string>;
   jitoWindowStartsAbs: number[];
   jitoWindowStartSet: Set<number>;
@@ -41,7 +49,10 @@ interface EpochWindows {
 export interface LeaderTrackerHealth {
   ready: boolean;
   epoch: number | undefined;
+  epochFirstSlot: number | undefined;
   jitoWindows: number;
+  /** Fraction of epoch slots flagged Jito (kobe ∩ schedule) — honest recall of the feed. */
+  coverageRatio: number;
   currentSlot: number;
   windowEvents: number;
   skipEvents: number;
@@ -68,6 +79,8 @@ export class LeaderWindowTracker {
   private windowEvents = 0;
   private skipEvents = 0;
   private rebuilding = false;
+  private rolloverBackoffUntil = 0;
+  private started = false;
   private stopped = false;
 
   private lastInJitoWindow: boolean | undefined;
@@ -82,17 +95,24 @@ export class LeaderWindowTracker {
   }
 
   async start(): Promise<void> {
+    if (this.started) return;
+    this.started = true;
     this.stopped = false;
     this.windows = await this.buildEpochWindows();
     this.bus.on('slot', this.onSlot);
     logger.info(
-      { epoch: this.windows.epoch, jitoWindows: this.windows.jitoWindowStartsAbs.length },
+      {
+        epoch: this.windows.epoch,
+        jitoWindows: this.windows.jitoWindowStartsAbs.length,
+        coverageRatio: this.coverageRatio(this.windows),
+      },
       'leader-window-tracker ready',
     );
   }
 
   async stop(): Promise<void> {
     this.stopped = true;
+    this.started = false;
     this.bus.off('slot', this.onSlot);
   }
 
@@ -100,7 +120,9 @@ export class LeaderWindowTracker {
     return {
       ready: this.windows !== undefined,
       epoch: this.windows?.epoch,
+      epochFirstSlot: this.windows?.epochFirstSlot,
       jitoWindows: this.windows?.jitoWindowStartsAbs.length ?? 0,
+      coverageRatio: this.windows ? this.coverageRatio(this.windows) : 0,
       currentSlot: this.currentSlot,
       windowEvents: this.windowEvents,
       skipEvents: this.skipEvents,
@@ -112,12 +134,17 @@ export class LeaderWindowTracker {
     const w = this.windows;
     if (!w) return undefined;
     const relIdx = absSlot - w.epochFirstSlot;
-    if (relIdx < 0 || relIdx >= w.epochLastSlot - w.epochFirstSlot + 1) return undefined;
+    if (relIdx < 0 || relIdx >= w.slotsInEpoch) return undefined;
     return w.leaderByWindowRel.get(relIdx - (relIdx % SLOTS_PER_LEADER));
   }
 
+  private coverageRatio(w: EpochWindows): number {
+    return (w.jitoWindowStartsAbs.length * SLOTS_PER_LEADER) / w.slotsInEpoch;
+  }
+
   private windowStartAbs(absSlot: number): number {
-    const w = this.windows!;
+    const w = this.windows;
+    if (!w) return absSlot;
     const relIdx = absSlot - w.epochFirstSlot;
     return w.epochFirstSlot + (relIdx - (relIdx % SLOTS_PER_LEADER));
   }
@@ -138,7 +165,7 @@ export class LeaderWindowTracker {
     this.currentSlot = update.slot;
 
     if (this.currentSlot > this.windows.epochLastSlot) {
-      void this.rebuildForEpochRollover();
+      if (Date.now() >= this.rolloverBackoffUntil) void this.rebuildForEpochRollover();
       return;
     }
     this.emitWindowIfChanged();
@@ -167,23 +194,31 @@ export class LeaderWindowTracker {
   }
 
   private emitSkip(slot: number): void {
-    const wasJitoWindow = this.isJitoSlot(slot);
     const event: LeaderSkipEvent = {
       slot,
       windowStartSlot: this.windowStartAbs(slot),
       leaderIdentity: this.leaderOfSlot(slot),
-      wasJitoWindow,
+      wasJitoWindow: this.isJitoSlot(slot),
     };
     this.skipEvents += 1;
     this.bus.emit('leaderSkip', event);
   }
 
   private async rebuildForEpochRollover(): Promise<void> {
-    if (this.rebuilding || this.stopped) return;
+    if (this.rebuilding || this.stopped || !this.windows) return;
     this.rebuilding = true;
-    logger.info({ currentSlot: this.currentSlot }, 'leader-window-tracker rebuilding for epoch rollover');
+    const previousEpoch = this.windows.epoch;
+    logger.info({ currentSlot: this.currentSlot, previousEpoch }, 'leader-window-tracker rebuilding for epoch rollover');
     try {
-      this.windows = await this.buildEpochWindows();
+      const next = await this.buildEpochWindows();
+      if (next.epoch <= previousEpoch) {
+        // RPC has not advanced its notion of the current epoch yet — back off so we
+        // don't re-download the multi-MB schedule every slot until it catches up.
+        this.rolloverBackoffUntil = Date.now() + ROLLOVER_BACKOFF_MS;
+        logger.warn({ rpcEpoch: next.epoch, previousEpoch }, 'leader-window-tracker rollover RPC lag — backing off');
+        return;
+      }
+      this.windows = next;
       this.lastInJitoWindow = undefined;
       this.lastNextWindowSlot = undefined;
     } catch (err) {
@@ -208,21 +243,37 @@ export class LeaderWindowTracker {
 
     const leaderByWindowRel = new Map<number, string>();
     const jitoWindowStartSet = new Set<number>();
+    let alignmentConflicts = 0;
 
     for (const [identity, indices] of Object.entries(schedule)) {
       const isJito = kobeSet.has(identity);
       for (const idx of indices) {
         const windowStartRel = idx - (idx % SLOTS_PER_LEADER);
-        if (!leaderByWindowRel.has(windowStartRel)) leaderByWindowRel.set(windowStartRel, identity);
+        const existing = leaderByWindowRel.get(windowStartRel);
+        if (existing !== undefined && existing !== identity) {
+          alignmentConflicts += 1; // two leaders in one 4-slot window ⇒ schedule is NOT 4-aligned
+        } else {
+          leaderByWindowRel.set(windowStartRel, identity);
+        }
         if (isJito) jitoWindowStartSet.add(epochFirstSlot + windowStartRel);
       }
     }
+
+    if (alignmentConflicts > 0) {
+      const error = new Error(
+        `leader schedule violated the 4-slot-aligned invariant (${alignmentConflicts} window conflicts) — leader decode is unsafe`,
+      );
+      logger.error({ epoch: epochInfo.epoch, alignmentConflicts }, error.message);
+      this.bus.emit('error', error);
+    }
+
     const jitoWindowStartsAbs = [...jitoWindowStartSet].sort((a, b) => a - b);
 
     return {
       epoch: epochInfo.epoch,
       epochFirstSlot,
       epochLastSlot,
+      slotsInEpoch: epochInfo.slotsInEpoch,
       leaderByWindowRel,
       jitoWindowStartsAbs,
       jitoWindowStartSet,
