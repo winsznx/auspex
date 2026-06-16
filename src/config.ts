@@ -34,6 +34,10 @@ export function yellowstoneConfig(): YellowstoneConfig {
   };
 }
 
+export function solanaRpcUrl(): string {
+  return requireEnv('SOLANA_RPC_URL');
+}
+
 export interface TipFloorConfig {
   restUrl: string;
   wsUrl: string;
