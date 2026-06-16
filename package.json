@@ -13,6 +13,7 @@
     "start": "node dist/src/index.js",
     "dev": "node --watch --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts",
     "verify:day0": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-day0.ts",
+    "verify:c3": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-c3.ts",
     "run:evidence": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts --mode=evidence",
     "run:ab": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts --mode=ab",
     "fault:blockhash": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts --inject=blockhash-expiry"

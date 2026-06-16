@@ -71,6 +71,39 @@ export interface LagSample {
   source: SlotSourceKind;
 }
 
+/**
+ * Jito landed-tip percentiles, normalized to LAMPORTS (the endpoint reports SOL).
+ * Integers — lamports are indivisible; we round on ingest so every downstream
+ * number is a real submittable tip amount, not a float a verifier can't reproduce.
+ */
+export interface TipPercentiles {
+  p25: number;
+  p50: number;
+  p75: number;
+  p95: number;
+  p99: number;
+  /** EMA of the 50th percentile — a smoothed trend signal, not a submit target. */
+  ema50: number;
+}
+
+/** Which Jito feed produced a tip-floor snapshot. */
+export type TipFloorSource = 'rest' | 'ws';
+
+/**
+ * The current cached tip-floor picture the hot path reads synchronously.
+ * `baselineLamports = max(p75, floorLamports)` (PRD §1/§9.3) — the A/B control arm.
+ */
+export interface TipFloorSnapshot {
+  percentiles: TipPercentiles;
+  baselineLamports: number;
+  floorLamports: number;
+  /** Endpoint-reported sample time (ISO) when present — provenance for evidence. */
+  sampledAt: string | undefined;
+  /** Local receive time (ms epoch). */
+  observedAt: number;
+  source: TipFloorSource;
+}
+
 export type IngestorPhase = 'idle' | 'connecting' | 'streaming' | 'reconnecting' | 'stopped';
 
 export interface IngestorHealth {
