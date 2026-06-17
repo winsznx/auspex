@@ -128,6 +128,44 @@ export interface LeaderSkipEvent {
   wasJitoWindow: boolean;
 }
 
+/** Wire encoding of a serialized transaction — Jito `sendBundle` accepts either. */
+export type TransactionEncoding = 'base58' | 'base64';
+
+/** The Jito tip carried as the bundle's last instruction. */
+export interface BundleTip {
+  /** Tip account (base58) — one of the block engine's `getTipAccounts`. */
+  account: string;
+  lamports: number;
+}
+
+/**
+ * A fully-signed, well-formed single-transaction bundle — construct-valid, not
+ * yet proven submittable (no simulate/submit until a funded wallet exists). C4
+ * builds + signs + validates this on the free RPC; C5 submits it.
+ * `encodedTransaction` is the wire payload Jito `sendBundle` expects (with
+ * `encoding`). Nothing here is broadcast — holding a `BuiltBundle` moves no SOL.
+ *
+ * PERISHABLE: the blockhash is valid for ~150 slots from `builtAt`. A consumer
+ * that holds a bundle before submitting MUST re-check liveness (compare
+ * `getBlockHeight` against `lastValidBlockHeight`, or call `isBlockhashValid`)
+ * immediately before `sendBundle` — a stale blockhash drops the bundle and
+ * wastes the tip.
+ */
+export interface BuiltBundle {
+  encodedTransaction: string;
+  encoding: TransactionEncoding;
+  /** Base58 transaction signature (the bundle's identity for lifecycle tracking). */
+  signature: string;
+  blockhash: string;
+  lastValidBlockHeight: number;
+  /** Fee payer / source wallet (base58). */
+  payer: string;
+  tip: BundleTip;
+  /** Lamports moved by the self-transfer leg (distinct from the tip + fee). */
+  selfTransferLamports: number;
+  builtAt: number;
+}
+
 export type IngestorPhase = 'idle' | 'connecting' | 'streaming' | 'reconnecting' | 'stopped';
 
 export interface IngestorHealth {

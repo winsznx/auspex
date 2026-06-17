@@ -38,6 +38,10 @@ export function solanaRpcUrl(): string {
   return requireEnv('SOLANA_RPC_URL');
 }
 
+export function jitoBlockEngineUrl(): string {
+  return requireEnv('JITO_BLOCK_ENGINE_URL');
+}
+
 const DEFAULT_KOBE_VALIDATORS_URL = 'https://kobe.mainnet.jito.network/api/v1/validators';
 
 export function kobeValidatorsUrl(): string {
