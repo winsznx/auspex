@@ -109,9 +109,12 @@ npm install
 cp .env.example .env      # fill REAL mainnet values (see .env.example for each)
 ```
 
-**What runs today** (data-plane live gates — free public infra, 0 SOL, no funded wallet needed):
+**What runs today** (free public infra, 0 SOL, no funded wallet needed):
 
 ```bash
+npm run dev               # boot the live data plane — C1–C4 on one process,
+                          # streaming real mainnet telemetry (no submit). Ctrl-C to stop.
+
 npm run verify:c1         # slot/commitment stream — watermarks advance
 npm run verify:c2         # Jito leader windows + leader decode cross-check
 npm run verify:c3         # live tip-floor percentiles + baseline = max(p75, floor)
@@ -119,6 +122,9 @@ npm run verify:c4         # construct + sign + validate a real base58 Jito bundl
 npm run verify:day0       # external-dependency gate (Yellowstone + wallet checks)
 npm run typecheck         # tsc --noEmit
 ```
+
+`npm run dev` selects the Yellowstone gRPC source when configured and otherwise falls back to the
+free RPC-WebSocket source, so it runs on the public endpoint with no credentials.
 
 **The end-to-end run** (evidence + A/B + fault loop) needs a funded hot wallet and is wired as
 C5–C12 land:
