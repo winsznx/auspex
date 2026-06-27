@@ -17,6 +17,7 @@
     "verify:c2": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-c2.ts",
     "verify:c3": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-c3.ts",
     "verify:c4": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-c4.ts",
+    "verify:c5": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-c5.ts",
     "run:evidence": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts --mode=evidence",
     "run:ab": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts --mode=ab",
     "fault:blockhash": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts --inject=blockhash-expiry"

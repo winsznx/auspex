@@ -166,6 +166,46 @@ export interface BuiltBundle {
   builtAt: number;
 }
 
+/**
+ * The receipt of a real `sendBundle` submission (C5). `bundleId` is Jito's
+ * SHA-256 of the bundle's transaction signatures (base58) — the identity used
+ * to poll lifecycle (C6). `signature` is the on-chain transaction signature a
+ * verifier looks up on Solscan. `encoding` records what we actually submitted
+ * with (base58 by default; base64 only if a decode-fallback fired).
+ */
+export interface SubmittedBundle {
+  bundleId: string;
+  signature: string;
+  encoding: TransactionEncoding;
+  blockhash: string;
+  lastValidBlockHeight: number;
+  tip: BundleTip;
+  payer: string;
+  submittedAt: number;
+}
+
+/** getInflightBundleStatuses status — Jito's 5-minute-lookback verdict. */
+export type JitoInflightStatusValue = 'Invalid' | 'Pending' | 'Failed' | 'Landed';
+
+/** One entry of a `getInflightBundleStatuses` response (null if not found). */
+export interface JitoInflightStatus {
+  bundleId: string;
+  status: JitoInflightStatusValue;
+  landedSlot: number | null;
+}
+
+/**
+ * One entry of a `getBundleStatuses` response (null if not found). `err` is
+ * Jito's `{ Ok: null }` on success or a transaction error object otherwise.
+ */
+export interface JitoBundleStatus {
+  bundleId: string;
+  transactions: string[];
+  slot: number;
+  confirmationStatus: SlotCommitment;
+  err: unknown;
+}
+
 export type IngestorPhase = 'idle' | 'connecting' | 'streaming' | 'reconnecting' | 'stopped';
 
 export interface IngestorHealth {
