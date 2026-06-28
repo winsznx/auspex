@@ -1,0 +1,12 @@
+# Auspex evidence/landing worker — Fly.io, Frankfurt (co-located with the
+# frankfurt Jito block engine). No public HTTP service: it's a worker we exec
+# the evidence run inside. Secrets (HOT_WALLET_SECRET_KEY, SOLANA_RPC_URL,
+# JITO_BLOCK_ENGINE_URL, GROQ_API_KEY) are set via `fly secrets set`, never here.
+app = "auspex-jito-evidence"
+primary_region = "fra"
+
+[build]
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"
