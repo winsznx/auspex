@@ -56,8 +56,8 @@ real output, no mocks. Components past C4 move real SOL and are gated on a funde
 | C2 | Leader Window Tracker | 🟢 **live** | `verify:c2` — Jito windows + 100% leader decode vs `getSlotLeaders` |
 | C3 | Tip-Floor Client + Baseline | 🟢 **live** | `verify:c3` — live percentiles, `baseline = max(p75, floor)` |
 | C4 | Bundle Constructor | 🟢 **live (construct)** | `verify:c4` — signed base58 bundle, tip-last, blockhash-live |
-| C5 | Submitter | ⏳ needs funded wallet | regional block-engine `sendBundle` → `bundle_id` |
-| C6 | Lifecycle Tracker | ⏳ | submitted→processed→confirmed→finalized + latency deltas |
+| C5 | Submitter | 🟢 **submit-path live** | real `bundle_id` from `sendBundle`, pre-submit blockhash recheck |
+| C6 | Lifecycle Tracker | 🟢 **built** | polls `getInflightBundleStatuses` → `getBundleStatuses`, classifies landed/failed |
 | C7 | Failure Classifier | ⏳ | label every non-landing outcome |
 | C8 | Tip Intelligence (control plane) | ⏳ | telemetry → regime → structured policy + reasoning log |
 | C9 | Failure-Reasoning Retry | ⏳ | sync agent diagnose→remedy→resubmit |
@@ -65,9 +65,14 @@ real output, no mocks. Components past C4 move real SOL and are gated on a funde
 | C11 | Fault Injector | ⏳ | force blockhash-expiry on command |
 | C12 | Evidence Logger | ⏳ | persist explorer-checkable lifecycle log |
 
-The data-plane foundation (C1–C4) runs today on free public infrastructure, 0 SOL spent. The
-submission/evidence path (C5–C12) is implemented once the hot wallet is funded — a 0-balance wallet
-fails simulation, and the win condition is *real* on-chain bundles, which cannot be mocked.
+The data-plane foundation (C1–C6) is built and runs live on mainnet. Submissions are accepted by
+the Jito Block Engine (real `bundle_id` returned) and the underlying transaction is provably valid
+(it lands on-chain as a normal transaction). **Open blocker:** bundles are accepted but never enter
+Jito's auction — every client-side cause (tip, region, timing, encoding, blockhash, structure, host,
+RPC) has been ruled out with live tests; the remaining cause is submission routing (a whitelisted /
+staked Jito connection). Full account, with the systematic elimination and on-chain artifacts, in
+[docs/BUNDLE-LANDING-INVESTIGATION.md](./docs/BUNDLE-LANDING-INVESTIGATION.md). The control plane
+(C8 AI tip), A/B harness (C10), and the ≥10-bundle evidence run (C12) unblock once landing does.
 
 ---
 

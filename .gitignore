@@ -20,3 +20,6 @@ npm-debug.log*
 # Keep evidence/ committed as proof (PRD §7) — only ignore scratch
 evidence/tmp/
 evidence/*.local.json
+
+# Local agent working memory (never commit)
+.claude/projects/
