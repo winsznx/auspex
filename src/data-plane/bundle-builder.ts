@@ -21,12 +21,14 @@
  * Nothing here is broadcast. Holding a `BuiltBundle` moves no SOL — simulation
  * and submission (C5) are separate steps that need a funded wallet.
  */
-import { Transaction, SystemProgram, PublicKey, type Keypair } from '@solana/web3.js';
+import { Transaction, SystemProgram, PublicKey, TransactionInstruction, type Keypair } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { logger } from '../shared/logger.ts';
 import type { BuiltBundle } from '../shared/types.ts';
 
 const JITO_MIN_TIP_LAMPORTS = 1000;
+const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
+const BUNDLE_MEMO = 'auspex';
 
 interface JsonRpcResponse<T> {
   result?: T;
@@ -118,6 +120,7 @@ export class BundleBuilder {
         toPubkey: this.payer.publicKey,
         lamports: selfTransferLamports,
       }),
+      new TransactionInstruction({ keys: [], programId: MEMO_PROGRAM_ID, data: Buffer.from(BUNDLE_MEMO) }),
       SystemProgram.transfer({
         fromPubkey: this.payer.publicKey,
         toPubkey: tipAccount,

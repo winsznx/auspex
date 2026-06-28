@@ -57,11 +57,6 @@ export interface BundleSubmitterDeps {
   blockEngineUrl: string;
 }
 
-function isDecodeError(message: string): boolean {
-  const m = message.toLowerCase();
-  return m.includes('could not be decoded') || m.includes('failed to deserialize') || m.includes('base58');
-}
-
 export class BundleSubmitter {
   private readonly rpcUrl: string;
   private readonly blockEngineUrl: string;
@@ -100,27 +95,19 @@ export class BundleSubmitter {
     encodedTransaction: string,
     encoding: TransactionEncoding,
   ): Promise<{ bundleId: string; encoding: TransactionEncoding }> {
-    try {
-      const bundleId = await this.rpc<string>(
-        `${this.blockEngineUrl}/api/v1/bundles`,
-        'sendBundle',
-        [[encodedTransaction], { encoding }],
-      );
-      return { bundleId, encoding };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (encoding === 'base58' && isDecodeError(message)) {
-        logger.warn({ message }, 'sendBundle base58 decode rejected — retrying as base64');
-        const base64 = Buffer.from(bs58.decode(encodedTransaction)).toString('base64');
-        const bundleId = await this.rpc<string>(
-          `${this.blockEngineUrl}/api/v1/bundles`,
-          'sendBundle',
-          [[base64], { encoding: 'base64' }],
-        );
-        return { bundleId, encoding: 'base64' };
-      }
-      throw err;
-    }
+    // Jito FORWARDS base64 bundles; base58 is deprecated and accepted-but-not-
+    // forwarded (sendBundle still returns a bundleId, but the bundle never enters
+    // the auction → getInflightBundleStatuses reports Invalid and it never lands).
+    // Jito's own basic_bundle example uses base64 + {encoding:'base64'}. So we
+    // always submit base64, converting from whatever wire bytes we were handed.
+    const bytes = encoding === 'base64' ? Buffer.from(encodedTransaction, 'base64') : bs58.decode(encodedTransaction);
+    const base64 = Buffer.from(bytes).toString('base64');
+    const bundleId = await this.rpc<string>(
+      `${this.blockEngineUrl}/api/v1/bundles`,
+      'sendBundle',
+      [[base64], { encoding: 'base64' }],
+    );
+    return { bundleId, encoding: 'base64' };
   }
 
   async getInflightBundleStatus(bundleId: string): Promise<JitoInflightStatus | null> {
