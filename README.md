@@ -156,9 +156,11 @@ explorer links
 ## Architecture
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — two-plane design, AI isolation, A/B method, evidence model.
+- [DEMO-SCRIPT.md](./DEMO-SCRIPT.md) — terminal-first 3-minute recording guide.
 - [ADVERSARIAL-TESTING.md](./ADVERSARIAL-TESTING.md) — skeptical tests, known blockers, and red-team checks.
 - [SECURITY.md](./SECURITY.md) — key handling, spend safety, and operational controls.
 - [BUNDLE-LANDING-INVESTIGATION.md](./docs/BUNDLE-LANDING-INVESTIGATION.md) — current Jito landing blocker.
+- [GEYSERBRIDGE-REVIEW.md](./docs/GEYSERBRIDGE-REVIEW.md) — review of the tempting free bridge route.
 
 ## Why Auspex Exists
 

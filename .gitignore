@@ -7,6 +7,9 @@
 
 # Internal working docs — kept local, out of the repo.
 internals/
+AUSPEX-PRD.md
+hackathon.md
+verdict.md
 
 # Dependencies / build
 node_modules/
