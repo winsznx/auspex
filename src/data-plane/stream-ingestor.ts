@@ -24,6 +24,7 @@ import Client, {
 } from '@triton-one/yellowstone-grpc';
 import type { AuspexBus } from '../shared/events.ts';
 import { logger } from '../shared/logger.ts';
+import { redactUrl } from '../shared/redact.ts';
 import { SlotStateTracker } from '../shared/slot-state.ts';
 import { slotPhaseFromStatus } from '../shared/types.ts';
 import type { IngestorHealth, IngestorPhase, SlotSource } from '../shared/types.ts';
@@ -113,6 +114,7 @@ export class StreamIngestor implements SlotSource {
   private async openStream(): Promise<void> {
     if (!this.client) throw new Error('StreamIngestor.openStream called without a client');
     this.setPhase('connecting');
+    await this.client.connect();
     const request: SubscribeRequest = {
       accounts: {},
       slots: { auspex: { filterByCommitment: false } },
@@ -133,7 +135,7 @@ export class StreamIngestor implements SlotSource {
     // data ever flows) is still caught by the watchdog.
     this.lastUpdateAt = Date.now();
     this.setPhase('streaming');
-    logger.info({ endpoint: this.config.endpoint }, 'stream-ingestor subscribed');
+    logger.info({ endpoint: redactUrl(this.config.endpoint) }, 'stream-ingestor subscribed');
   }
 
   private onUpdate(update: SubscribeUpdate): void {

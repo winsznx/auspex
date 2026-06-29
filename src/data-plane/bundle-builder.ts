@@ -9,8 +9,9 @@
  * blockhash-live; it is NOT proof Jito will accept it (that needs C5 + funds).
  *
  * Verified facts driving the wire format (see memory `c4-bundle-constructor`):
- *  - Jito `sendBundle` requires **base58**-encoded transactions, not base64
- *    (Solana's own `sendTransaction` uses base64 — Jito diverges; live-proven).
+ *  - The builder stores base58 wire bytes because that is convenient for local
+ *    decode/inspection. C5 converts the same bytes to Jito's recommended base64
+ *    submit encoding immediately before `sendBundle`.
  *  - A LEGACY `Transaction` is accepted (no address-lookup-table needed for a
  *    two-instruction self-transfer + tip).
  *  - Tip account: pick one of the block engine's 8 `getTipAccounts` at random

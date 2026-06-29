@@ -4,7 +4,11 @@
  * IP-whitelist theory: our direct submissions get a bundleId but never enter the
  * auction; a provider with a staked Jito connection should actually land it.
  *
- * Provide your Helius RPC URL (free tier) via env — NOT committed, not in .env:
+ * Provide your Helius RPC URL via env. Helius exposes these methods in docs,
+ * but `sendBundle` may be plan-gated; the API currently returns
+ * "business plans or above" for free accounts.
+ *
+ * Do not commit the URL/key:
  *   HELIUS_RPC_URL='https://mainnet.helius-rpc.com/?api-key=YOUR_KEY' \
  *     node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/diag-helius.ts
  *   optional: DIAG_TIP (lamports, default 10000), DIAG_ATTEMPTS (default 3)

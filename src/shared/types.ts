@@ -219,8 +219,9 @@ export interface IngestorHealth {
 
 /**
  * A live slot/commitment feed. Both the Yellowstone gRPC ingestor (C1) and the
- * RPC-WebSocket fallback implement this, so the rest of the stack is
- * source-agnostic. The bounty permits "any compatible Geyser stream provider".
+ * Solana PubSub WebSocket source implement this, so the rest of the stack is
+ * source-agnostic. The WebSocket source is real mainnet telemetry, but it is not
+ * claimed as Yellowstone/Geyser evidence.
  */
 export interface SlotSource {
   start(): Promise<void>;

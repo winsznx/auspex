@@ -1,6 +1,6 @@
 /**
  * Source-agnostic slot state: monotonic watermarks + processed→confirmed lag.
- * Shared by every slot source (Yellowstone gRPC C1, RPC-WebSocket fallback) so
+ * Shared by every slot source (Yellowstone gRPC C1, Solana PubSub WebSocket) so
  * the watermark/lag rules live in exactly one tested place.
  *
  * Pure: `observe()` mutates internal state and RETURNS what should be emitted;

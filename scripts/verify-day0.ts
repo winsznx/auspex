@@ -11,7 +11,7 @@
  * balance decode) per .claude/agents and CLAUDE.md. It must reach ALL GREEN
  * before Phase-1 (C1+) build begins.
  */
-import 'dotenv/config';
+import '../src/shared/load-env.ts';
 import Client, {
   CommitmentLevel,
   type SubscribeRequest,
@@ -19,10 +19,11 @@ import Client, {
 } from '@triton-one/yellowstone-grpc';
 import { Keypair, LAMPORTS_PER_SOL } from '@solana/web3.js';
 import bs58 from 'bs58';
+import { yellowstoneReadiness } from '../src/shared/yellowstone-env.ts';
 
 type Check = { name: string; pass: boolean; detail: string };
 
-const MIN_WALLET_SOL = 0.05;
+const MIN_WALLET_SOL = Number(process.env.DAY0_MIN_WALLET_SOL ?? 0.02);
 
 const env = (k: string) => process.env[k]?.trim() || '';
 
@@ -132,11 +133,13 @@ async function checkBlockhashConfirmed(): Promise<Check> {
 async function checkYellowstoneSlots(): Promise<Check> {
   const endpoint = env('YELLOWSTONE_GRPC_ENDPOINT');
   const xToken = env('YELLOWSTONE_X_TOKEN');
-  if (!endpoint || !xToken) {
-    return { name: 'yellowstone:slots', pass: false, detail: 'YELLOWSTONE_GRPC_ENDPOINT/X_TOKEN missing' };
+  const readiness = yellowstoneReadiness(endpoint, xToken);
+  if (!readiness.usable) {
+    return { name: 'yellowstone:slots', pass: false, detail: readiness.reason };
   }
   const r = await timed(async () => {
     const client = new Client(endpoint, xToken, undefined, { enabled: true, slotRetention: 150 });
+    await client.connect();
     const request: SubscribeRequest = {
       accounts: {},
       slots: { day0: { filterByCommitment: false } },

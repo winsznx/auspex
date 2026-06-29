@@ -1,25 +1,24 @@
 /**
- * RPC-WebSocket slot source — the free fallback for C1's Yellowstone gRPC feed.
+ * Solana PubSub WebSocket slot source — the available C1 stream with today's env.
  *
- * The bounty allows "any compatible Geyser stream provider"; standard Solana RPC
- * exposes `slotsUpdatesSubscribe` (via web3.js `onSlotUpdate`) over a free
- * WebSocket, carrying the same commitment progression. We map its `type` to our
- * SlotPhase and feed the SAME SlotStateTracker the gRPC ingestor uses.
+ * Standard Solana RPC exposes `slotsUpdatesSubscribe` through web3.js
+ * `onSlotUpdate`. It is useful for development and judge demos because it shows
+ * live commitment progression, but it is not Dragon's Mouth, not Yellowstone,
+ * and not a replacement for a real Geyser/gRPC upstream.
  *
- * Phase mapping: frozen→processed, optimisticConfirmation→confirmed, root→
+ * Phase mapping: frozen -> processed, optimisticConfirmation -> confirmed, root ->
  * finalized; createdBank/firstShredReceived/completed/dead pass through.
  *
- * ⚠️ FALLBACK ONLY — NOT on the evidence path until C1 (gRPC) has passed its live
- * gate. Two honesty caveats vs gRPC: (1) lag here is local-receive-clock and is
- * tagged `source:'ws'` — never mix with gRPC lag; (2) many providers do not
- * enable `slotsUpdatesSubscribe` ("unstable"), so we stay in `connecting` and
- * never claim `streaming` until a real update arrives, and a silence watchdog
- * rebuilds the Connection if the feed goes quiet (web3.js auto-reconnect does
- * not cover a wedged half-open socket or an endpoint that simply never pushes).
+ * AVAILABLE-INFRA ONLY — NOT on the Dragon's Mouth evidence path until C1 (gRPC)
+ * has passed its live gate. Two honesty caveats vs gRPC: (1) lag here is local-receive-clock
+ * and is tagged `source:'ws'`; never mix with gRPC lag; (2) many providers do
+ * not enable `slotsUpdatesSubscribe` ("unstable"), so we stay in `connecting`
+ * and never claim `streaming` until a real update arrives.
  */
 import { Connection, type SlotUpdate as Web3SlotUpdate } from '@solana/web3.js';
 import type { AuspexBus } from '../shared/events.ts';
 import { logger } from '../shared/logger.ts';
+import { redactUrl } from '../shared/redact.ts';
 import { SlotStateTracker } from '../shared/slot-state.ts';
 import type { IngestorHealth, IngestorPhase, SlotPhase, SlotSource } from '../shared/types.ts';
 
@@ -99,7 +98,7 @@ export class WebSocketSlotSource implements SlotSource {
     this.connection = new Connection(this.rpcUrl, 'confirmed');
     this.subscriptionId = this.connection.onSlotUpdate((update) => this.onUpdate(update));
     this.lastUpdateAt = Date.now(); // start the silence clock now
-    logger.info({ rpcUrl: this.rpcUrl }, 'ws-slot-source subscribing');
+    logger.info({ rpcUrl: redactUrl(this.rpcUrl) }, 'ws-slot-source subscribing');
   }
 
   private async unsubscribe(): Promise<void> {

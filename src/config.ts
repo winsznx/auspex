@@ -3,7 +3,8 @@
  * hardcodes a value. `requireEnv` fails fast with a clear message; component
  * config getters pull only what that component needs.
  */
-import 'dotenv/config';
+import './shared/load-env.ts';
+import { yellowstoneReadiness, type YellowstoneConfigReadiness } from './shared/yellowstone-env.ts';
 
 function read(name: string): string | undefined {
   const value = process.env[name]?.trim();
@@ -32,6 +33,10 @@ export function yellowstoneConfig(): YellowstoneConfig {
     endpoint: requireEnv('YELLOWSTONE_GRPC_ENDPOINT'),
     xToken: requireEnv('YELLOWSTONE_X_TOKEN'),
   };
+}
+
+export function yellowstoneConfigReadiness(): YellowstoneConfigReadiness {
+  return yellowstoneReadiness(optionalEnv('YELLOWSTONE_GRPC_ENDPOINT'), optionalEnv('YELLOWSTONE_X_TOKEN'));
 }
 
 export function solanaRpcUrl(): string {

@@ -11,9 +11,8 @@
  *    `submit` re-probes `isBlockhashValid` immediately before `sendBundle` and
  *    throws `BlockhashExpiredError` instead of burning SOL. This is exactly the
  *    failure the C11 fault injector forces.
- *  - (a) BASE64 DECODE FALLBACK. base58 is verified-accepted but Jito marks it
- *    deprecated; on a decode-failure response we re-encode the same wire bytes
- *    as base64 and retry once.
+ *  - (a) BASE64 SUBMIT ENCODING. Jito accepts base58 but marks it slow and
+ *    deprecated; we re-encode the same signed wire bytes as base64 before submit.
  *
  * Verified Jito facts (memory `c4-bundle-constructor`):
  *  - sendBundle: POST <blockEngine>/api/v1/bundles, params `[[tx], {encoding}]`,
@@ -95,11 +94,8 @@ export class BundleSubmitter {
     encodedTransaction: string,
     encoding: TransactionEncoding,
   ): Promise<{ bundleId: string; encoding: TransactionEncoding }> {
-    // Jito FORWARDS base64 bundles; base58 is deprecated and accepted-but-not-
-    // forwarded (sendBundle still returns a bundleId, but the bundle never enters
-    // the auction → getInflightBundleStatuses reports Invalid and it never lands).
-    // Jito's own basic_bundle example uses base64 + {encoding:'base64'}. So we
-    // always submit base64, converting from whatever wire bytes we were handed.
+    // Jito's docs and SDK example recommend base64; base58 is slow/deprecated.
+    // Always submit base64, converting from whatever signed wire bytes we were handed.
     const bytes = encoding === 'base64' ? Buffer.from(encodedTransaction, 'base64') : bs58.decode(encodedTransaction);
     const base64 = Buffer.from(bytes).toString('base64');
     const bundleId = await this.rpc<string>(

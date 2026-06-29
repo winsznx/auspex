@@ -17,6 +17,7 @@ import { AuspexBus } from '../src/shared/events.ts';
 import { kobeValidatorsUrl, solanaRpcUrl } from '../src/config.ts';
 import { WebSocketSlotSource } from '../src/data-plane/ws-slot-source.ts';
 import { LeaderWindowTracker } from '../src/data-plane/leader-window-tracker.ts';
+import { redactUrl } from '../src/shared/redact.ts';
 
 const RUN_MS = Number(process.env.C2_RUN_MS ?? 60_000);
 const SAMPLE = 32;
@@ -43,7 +44,7 @@ async function main(): Promise<void> {
     console.error('bus error:', e.message);
   });
 
-  console.log(`C2 verify · rpc=${rpcUrl} · ${RUN_MS}ms`);
+  console.log(`C2 verify · rpc=${redactUrl(rpcUrl)} · ${RUN_MS}ms`);
   await tracker.start();
   await source.start();
   await new Promise<void>((resolve) => setTimeout(resolve, RUN_MS));

@@ -6,7 +6,7 @@
  * re-deriving every claim independently — it never trusts the builder's own
  * object:
  *   - decodes `bs58(encodedTransaction)` → a legacy `Transaction`
- *   - asserts exactly 2 System-program instructions, tip LAST
+ *   - asserts the expected self-transfer → memo → tip instruction order, with tip LAST
  *   - re-derives the tip leg via `SystemInstruction.decodeTransfer` and checks
  *     destination ∈ an INDEPENDENT live `getTipAccounts` fetch, amount ≥ floor
  *   - asserts local `verifySignatures()` and recentBlockhash round-trip
@@ -17,13 +17,14 @@
  *
  * Run: npm run verify:c4
  */
-import { Transaction, SystemProgram, SystemInstruction } from '@solana/web3.js';
+import { PublicKey, Transaction, SystemProgram, SystemInstruction } from '@solana/web3.js';
 import bs58 from 'bs58';
 import { jitoBlockEngineUrl, solanaRpcUrl, tipFloorConfig } from '../src/config.ts';
 import { loadHotWallet } from '../src/shared/wallet.ts';
 import { BundleBuilder } from '../src/data-plane/bundle-builder.ts';
 
 const SELF_TRANSFER_LAMPORTS = 1;
+const MEMO_PROGRAM_ID = new PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr');
 
 const checks: { name: string; pass: boolean; detail: string }[] = [];
 function check(name: string, pass: boolean, detail: string): void {
@@ -69,12 +70,13 @@ async function main(): Promise<void> {
 
   const decoded = Transaction.from(bs58.decode(built.encodedTransaction));
   const ixs = decoded.instructions;
-  check('exactly 2 instructions', ixs.length === 2, `${ixs.length}`);
+  check('exactly 3 instructions', ixs.length === 3, `${ixs.length}`);
   check(
-    'all System-program instructions',
-    ixs.every((ix) => ix.programId.equals(SystemProgram.programId)),
-    `${ixs.length} System ix`,
+    'exactly 2 System-program instructions',
+    ixs.filter((ix) => ix.programId.equals(SystemProgram.programId)).length === 2,
+    `${ixs.filter((ix) => ix.programId.equals(SystemProgram.programId)).length} System ix`,
   );
+  check('memo is the middle instruction', ixs[1]?.programId.equals(MEMO_PROGRAM_ID) === true, 'self-transfer → memo → tip');
 
   const lastIx = ixs[ixs.length - 1];
   let tipDestMatches = false;

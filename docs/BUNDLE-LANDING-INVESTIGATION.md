@@ -59,14 +59,15 @@ bundle is dropped at **intake**, before the auction.
 | Multi-region duplicate | single region, single submit | still `Invalid` |
 | Bundle structure | mirrored Jito's official `basic_bundle.js` exactly (real transfer → tip → memo) | still `Invalid` |
 | Tip account stale | verified `getTipAccounts` global == regional == canonical 8 | valid, not the cause |
-| Host location / latency | this machine **and** a Fly.io Frankfurt datacenter (co-located with Jito) | both fail identically — not latency, not location |
+| Host location / latency | this machine **and** a Frankfurt data-center host co-located with Jito | both fail identically — not latency, not location |
 | RPC blockhash view | swapped public RPC for a dedicated provider RPC | still `Invalid` |
+| Helius free plan | `sendBundle` through configured Helius RPC | blocked by API: business plan or above required |
 | Our submitter code | Jito's own `jito-js-rpc` SDK from the same host | identical `Invalid` — not our code |
 
 Two facts are constant across every failing configuration: the **wallet** and the **direct,
 unauthenticated submission to Jito's public block engine**.
 
-## Leading hypothesis (untested by us)
+## Leading hypothesis
 
 Provider documentation (e.g. Triton) notes that **the customer is responsible for having their
 IP whitelisted with Jito's Block Engine**, and providers (Helius "Sender", Triton, QuickNode
@@ -74,10 +75,14 @@ IP whitelisted with Jito's Block Engine**, and providers (Helius "Sender", Trito
 fits every symptom: an un-whitelisted IP receives a `bundle_id` (the tx parsed) but the bundle is
 never admitted to the auction (`Invalid`), regardless of tip, region, timing, or structure.
 
-**Next step:** route `sendBundle` through a provider that holds a whitelisted/staked Jito
-connection (the format is identical — only the endpoint changes). `scripts/diag-helius.ts` is
-ready to test exactly this. If the bundle lands, the `bundle_id` is a real Jito bundle verifiable
-on `explorer.jito.wtf`, and the path to the full ≥10-bundle evidence run is unblocked.
+Helius confirms the same direction operationally: its free RPC endpoint is healthy for normal RPC,
+but `sendBundle` is gated to business plans or above. That makes the remaining unblocker commercial
+access to a provider bundle route, not a local code change.
+
+**Next step:** get an eligible provider route: Helius Business/Sender access, QuickNode Lil' JIT,
+SolInfra-sponsored Yellowstone/Jito support, or direct Jito whitelisting. If one bundle lands, the
+`bundle_id` is a real Jito bundle verifiable on `explorer.jito.wtf`, and the path to the full
+≥10-bundle evidence run is unblocked.
 
 ## Diagnostic scripts (the investigation, reproducible)
 
@@ -88,7 +93,7 @@ All under `scripts/`, each a single real-mainnet probe:
 - `diag-land.ts` — multi-region, escalating-tip submit
 - `diag-land1.ts` — single-region, small-tip, patient poll
 - `diag-land2.ts` — mirrors Jito's `basic_bundle.js` structure exactly
-- `diag-helius.ts` — submit via a provider's staked Jito connection (the next test)
+- `diag-helius.ts` — submit via Helius RPC; free accounts currently return a business-plan gate
 - `diag-sdk.ts` / `diag-simbundle.ts` / `diag-bundle.ts` — Jito SDK + block-engine probes
 
 ## Honest position

@@ -2,7 +2,8 @@
   "name": "auspex",
   "version": "0.1.0",
   "private": true,
-  "description": "Solana smart-transaction stack with an AI control plane that decides Jito bundle tip + timing from live network telemetry, and proves it beats the hardcoded baseline with on-chain-verifiable evidence.",
+  "license": "MIT",
+  "description": "Solana smart-transaction stack that streams live mainnet telemetry, asks an AI control plane for bounded Jito bid policy, and constructs verifiable bundle bytes.",
   "type": "module",
   "engines": {
     "node": ">=22.6"
@@ -18,6 +19,9 @@
     "verify:c3": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-c3.ts",
     "verify:c4": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-c4.ts",
     "verify:c5": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-c5.ts",
+    "verify:evidence": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/verify-evidence.ts",
+    "doctor:env": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/doctor-env.ts",
+    "judge:demo": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/judge-demo.ts",
     "run:evidence": "node --experimental-strip-types --disable-warning=ExperimentalWarning scripts/run-evidence.ts",
     "run:ab": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts --mode=ab",
     "fault:blockhash": "node --experimental-strip-types --disable-warning=ExperimentalWarning src/index.ts --inject=blockhash-expiry"

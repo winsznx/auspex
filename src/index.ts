@@ -2,8 +2,8 @@
  * Auspex process entrypoint — boots the two logical planes as one process.
  *
  * Today it wires the BUILT data-plane components onto a single AuspexBus and
- * runs them live: C1 slot/commitment source (Yellowstone gRPC if configured,
- * else the free RPC-WebSocket fallback), C2 leader-window tracking, C3 tip-floor
+ * runs them live: C1 slot/commitment source (Solana PubSub WebSocket with
+ * optional Yellowstone gRPC), C2 leader-window tracking, C3 tip-floor
  * + baseline, and C4's bundle constructor (initialized read-only — it loads tip
  * accounts but builds/submits nothing).
  *
@@ -12,7 +12,7 @@
  * modes report honestly that they need the funded submission path, rather than
  * exiting 0 as if they had run.
  */
-import 'dotenv/config';
+import './shared/load-env.ts';
 import { AuspexBus } from './shared/events.ts';
 import { logger } from './shared/logger.ts';
 import {
@@ -21,7 +21,7 @@ import {
   tipFloorConfig,
   jitoBlockEngineUrl,
   yellowstoneConfig,
-  optionalEnv,
+  yellowstoneConfigReadiness,
 } from './config.ts';
 import type { LeaderWindowEvent, SlotSource } from './shared/types.ts';
 import { WebSocketSlotSource } from './data-plane/ws-slot-source.ts';
@@ -51,9 +51,8 @@ function parseArgs(argv: string[]): CliArgs {
 }
 
 async function startSlotSource(bus: AuspexBus, rpcUrl: string): Promise<{ source: SlotSource; kind: string }> {
-  const hasYellowstone =
-    optionalEnv('YELLOWSTONE_GRPC_ENDPOINT') !== undefined && optionalEnv('YELLOWSTONE_X_TOKEN') !== undefined;
-  if (hasYellowstone) {
+  const readiness = yellowstoneConfigReadiness();
+  if (readiness.usable) {
     const primary = new StreamIngestor({ bus, config: yellowstoneConfig() });
     try {
       await primary.start();
@@ -61,14 +60,19 @@ async function startSlotSource(bus: AuspexBus, rpcUrl: string): Promise<{ source
     } catch (err) {
       logger.warn(
         { err: err instanceof Error ? err.message : String(err) },
-        'Yellowstone gRPC source failed to start — falling back to the RPC-WebSocket source',
+        'Yellowstone gRPC source failed to start — using the Solana PubSub WebSocket source',
       );
       await primary.stop().catch(() => undefined);
     }
+  } else {
+    logger.warn(
+      { endpointClass: readiness.endpointClass, reason: readiness.reason },
+      'Yellowstone gRPC source is not ready — using the Solana PubSub WebSocket source',
+    );
   }
-  const fallback = new WebSocketSlotSource({ bus, rpcUrl });
-  await fallback.start();
-  return { source: fallback, kind: 'rpc-websocket' };
+  const pubsub = new WebSocketSlotSource({ bus, rpcUrl });
+  await pubsub.start();
+  return { source: pubsub, kind: 'solana-pubsub-websocket' };
 }
 
 async function initBundleBuilder(rpcUrl: string): Promise<BundleBuilder | undefined> {

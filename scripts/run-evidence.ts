@@ -157,7 +157,7 @@ async function main(): Promise<void> {
   writeFileSync(outPath, JSON.stringify(summary, null, 2));
 
   // Echo the full evidence to stdout between markers so it is recoverable from
-  // `fly logs` even though the container filesystem is ephemeral.
+  // Railway deploy logs even if the container filesystem is ephemeral.
   console.log('---EVIDENCE-JSON-BEGIN---');
   console.log(JSON.stringify(summary));
   console.log('---EVIDENCE-JSON-END---');

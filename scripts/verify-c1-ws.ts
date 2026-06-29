@@ -1,6 +1,6 @@
 /**
- * C1 live gate via the RPC-WebSocket fallback (no Yellowstone, no funded wallet,
- * free public RPC). Proves the data-plane slot source streams live mainnet slots
+ * C1 live gate via Solana PubSub WebSocket (no Yellowstone, no funded wallet).
+ * Proves the data-plane slot source streams live mainnet slots
  * with MONOTONICALLY ADVANCING processed → confirmed → finalized watermarks and
  * emits slot/watermark/lag/health on the bus.
  *
@@ -13,6 +13,7 @@
 import { AuspexBus } from '../src/shared/events.ts';
 import { solanaRpcUrl } from '../src/config.ts';
 import { WebSocketSlotSource } from '../src/data-plane/ws-slot-source.ts';
+import { redactUrl } from '../src/shared/redact.ts';
 import type { Watermarks } from '../src/shared/types.ts';
 
 const RUN_MS = Number(process.env.C1_RUN_MS ?? 40_000);
@@ -43,7 +44,7 @@ async function main(): Promise<void> {
   });
   bus.on('error', (e) => console.error('bus error:', e.message));
 
-  console.log(`C1 verify (WS fallback) · rpc=${rpcUrl} · ${RUN_MS}ms`);
+  console.log(`C1 verify (Solana PubSub WS) · rpc=${redactUrl(rpcUrl)} · ${RUN_MS}ms`);
   await source.start();
   await new Promise<void>((resolve) => setTimeout(resolve, RUN_MS));
   await source.stop();
